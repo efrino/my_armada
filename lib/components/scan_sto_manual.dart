@@ -1,112 +1,68 @@
 import 'package:flutter/material.dart';
 import '../services/scan_sto.dart';
 
-class ScanStoManualModal extends StatefulWidget {
-  final String area;
+class StoManualInputModal extends StatefulWidget {
+  final String group;
   final String nik;
-  final Function(Map<String, dynamic> result) onSubmit;
+  final bool canInput;
+  final Function(Map<String, dynamic> tagData) onTagFound;
 
-  const ScanStoManualModal({
+  const StoManualInputModal({
     super.key,
-    required this.area,
+    required this.group,
     required this.nik,
-    required this.onSubmit,
+    required this.canInput,
+    required this.onTagFound,
   });
 
   @override
-  State<ScanStoManualModal> createState() => _ScanStoManualModalState();
+  State<StoManualInputModal> createState() => _StoManualInputModalState();
 }
 
-class _ScanStoManualModalState extends State<ScanStoManualModal> {
-  final TextEditingController _qtyController = TextEditingController();
-  List<Map<String, dynamic>> partList = [];
-  String? selectedPartNumber;
+class _StoManualInputModalState extends State<StoManualInputModal> {
+  final _codeController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   bool isLoading = false;
-  bool isSubmitting = false;
+  String? errorMessage;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadPartData();
+  Color get groupColor {
+    return widget.group.toUpperCase() == 'A' ? Colors.blue : Colors.orange;
   }
 
-  Future<void> _loadPartData() async {
+  Future<void> _handleSearch() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final code = _codeController.text.trim().toUpperCase();
+
     setState(() {
       isLoading = true;
+      errorMessage = null;
     });
 
     try {
-      final parts = await ScanStoService.getPartData(widget.area);
-      setState(() {
-        partList = parts;
-        isLoading = false;
-      });
-    } catch (e) {
+      final tagData = await ScanStoService.getTagData(code);
+
+      if (!mounted) return;
+
       setState(() {
         isLoading = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading part data: $e')));
+
+      if (tagData != null) {
+        widget.onTagFound(tagData);
+      } else {
+        setState(() {
+          errorMessage = 'Tag "$code" tidak ditemukan';
+        });
       }
-    }
-  }
-
-  Future<void> _handleSubmit() async {
-    if (selectedPartNumber == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih part number terlebih dahulu')),
-      );
-      return;
-    }
-
-    if (_qtyController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Qty tidak boleh kosong')));
-      return;
-    }
-
-    setState(() {
-      isSubmitting = true;
-    });
-
-    try {
-      final result = await ScanStoService.manualInput(
-        nik: widget.nik,
-        partNumber: selectedPartNumber!,
-        qty: _qtyController.text,
-        area: widget.area,
-      );
-
-      setState(() {
-        isSubmitting = false;
-      });
-
-      // Close modal and pass result to parent
-      Navigator.pop(context);
-      widget.onSubmit(result);
     } catch (e) {
-      setState(() {
-        isSubmitting = false;
-      });
+      if (!mounted) return;
 
-      // Close modal and pass error to parent
-      Navigator.pop(context);
-      widget.onSubmit({
-        'success': false,
-        'statusCode': 0,
-        'message': 'Error: ${e.toString()}',
-        'data': null,
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Error: $e';
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _qtyController.dispose();
-    super.dispose();
   }
 
   @override
@@ -116,155 +72,199 @@ class _ScanStoManualModalState extends State<ScanStoManualModal> {
       child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Input Manual',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(),
-              const SizedBox(height: 10),
-
-              // Area Badge
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'Area: ${widget.area}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Part Number Dropdown
-              const Text(
-                'Part Number / Job Number',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 8),
-              isLoading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  : DropdownButtonFormField<String>(
-                      initialValue: selectedPartNumber,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        hintText: 'Pilih Part Number',
-                      ),
-                      items: partList.map((part) {
-                        return DropdownMenuItem<String>(
-                          value:
-                              part['part_number']?.toString() ??
-                              part['job_number']?.toString(),
-                          child: Text(
-                            part['part_number']?.toString() ??
-                                part['job_number']?.toString() ??
-                                'Unknown',
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.keyboard, color: groupColor),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Input Manual',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedPartNumber = value;
-                        });
-                      },
+                        ),
+                      ],
                     ),
-              const SizedBox(height: 16),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                const SizedBox(height: 16),
 
-              // Qty Input
-              const Text(
-                'Quantity',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _qtyController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
+                // Group Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
                     vertical: 8,
                   ),
-                  hintText: 'Masukkan quantity',
+                  decoration: BoxDecoration(
+                    color: groupColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: groupColor),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.group_work, color: groupColor, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Group ${widget.group}',
+                        style: TextStyle(
+                          color: groupColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
-              // Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: isSubmitting
-                          ? null
-                          : () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: const Text('Batal'),
-                    ),
+                // Instructions
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: isSubmitting ? null : _handleSubmit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.grey.shade600),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Masukkan kode Tag STO jika QR Code tidak terbaca.\nContoh: A12345',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                      child: isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Input Field
+                TextFormField(
+                  controller: _codeController,
+                  textCapitalization: TextCapitalization.characters,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Kode Tag STO',
+                    hintText: 'Contoh: A12345',
+                    prefixIcon: Icon(Icons.qr_code, color: groupColor),
+                    suffixIcon: _codeController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _codeController.clear();
+                              setState(() {
+                                errorMessage = null;
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: groupColor, width: 2),
+                    ),
+                    errorText: errorMessage,
+                  ),
+                  onChanged: (_) {
+                    setState(() {
+                      errorMessage = null;
+                    });
+                  },
+                  onFieldSubmitted: (_) => _handleSearch(),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Kode tidak boleh kosong';
+                    }
+                    if (value.trim().length < 2) {
+                      return 'Kode minimal 2 karakter';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Batal'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : _handleSearch,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: groupColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.search, size: 18),
+                                  SizedBox(width: 6),
+                                  Text('Cari Tag'),
+                                ],
                               ),
-                            )
-                          : const Text('Submit'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
   }
 }

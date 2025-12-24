@@ -5,13 +5,14 @@ import '../utils/permissions.dart';
 
 import '../pages/home.dart';
 import '../pages/profile.dart';
-// import '../pages/history_scan.dart';
-// import '../pages/history_sto.dart';
 import '../pages/scan_in.dart';
 import '../pages/scan_out.dart';
+import '../pages/scan_ifp_wss.dart';
 import '../pages/scan_sto.dart';
+// import '../pages/history_scan.dart';
+// import '../pages/history_sto.dart';
+import '../pages/history_ifp_wss.dart'; // <-- Import History IFP WSS
 import '../pages/admin/user_management.dart';
-//import '../pages/wss_adm.dart;'
 
 class MainLayout extends StatefulWidget {
   final int initialIndex;
@@ -62,6 +63,15 @@ class _MainLayoutState extends State<MainLayout> {
       enabled: true,
       requireLogin: true,
     ),
+    // Menu WSS ADM - Scan In IFP WSS
+    MenuItemConfig(
+      id: 'wss_adm',
+      title: 'Scan In IFP WSS',
+      icon: Icons.view_in_ar,
+      permission: AppPermissions.viewScanIfpWss,
+      enabled: true,
+      requireLogin: true,
+    ),
     MenuItemConfig(
       id: 'scan_sto',
       title: 'Scan STO',
@@ -78,6 +88,15 @@ class _MainLayoutState extends State<MainLayout> {
       enabled: false, // Fitur belum tersedia
       requireLogin: true,
     ),
+    // Menu History IFP WSS
+    MenuItemConfig(
+      id: 'history_ifpwss',
+      title: 'History IFP WSS',
+      icon: Icons.store,
+      permission: AppPermissions.viewHistoryIfpWss,
+      enabled: true,
+      requireLogin: true,
+    ),
     MenuItemConfig(
       id: 'history_sto',
       title: 'History STO',
@@ -90,20 +109,11 @@ class _MainLayoutState extends State<MainLayout> {
     MenuItemConfig(
       id: 'user_management',
       title: 'Kelola User',
-      icon: Icons.admin_panel_settings,
+      icon: Icons.support_agent,
       permission: AppPermissions.manageUsers,
       enabled: true,
       requireLogin: true,
       adminOnly: true,
-    ),
-    //Menu WSS ADM
-    MenuItemConfig(
-      id: 'wss_adm',
-      title: 'Scan In IFP WSS',
-      icon: Icons.safety_check,
-      permission: AppPermissions.viewScanIfpWss,
-      enabled:true,
-      requireLogin: true,
     ),
   ];
 
@@ -190,12 +200,18 @@ class _MainLayoutState extends State<MainLayout> {
         return ScanInPage(nik: permissionManager.userNik);
       case 'scan_out':
         return ScanOutPage(nik: permissionManager.userNik);
+      case 'wss_adm':
+        return ScanIfpWssPage(nik: permissionManager.userNik);
       case 'scan_sto':
         return ScanStoPage(nik: permissionManager.userNik);
       case 'history_scan':
         return const Center(child: Text('History Scan - Coming Soon'));
       case 'history_sto':
         return const Center(child: Text('History STO - Coming Soon'));
+      // ========== History IFP WSS ==========
+      case 'history_ifpwss':
+        return const HistoryIfpWssPage();
+      // =====================================
       case 'user_management':
         return const UserManagementPage();
       default:
@@ -358,9 +374,23 @@ class _MainLayoutState extends State<MainLayout> {
         key: _scaffoldKey,
         appBar: AppBar(
           title: Text(currentItem.title),
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
           elevation: 2,
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.transparent, // WAJIB untuk gradient
+          iconTheme: const IconThemeData(color: Colors.white),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Color(0xFF1976D2), // biru
+                  Color(0xFF7B1FA2), // ungu (transisi natural)
+                  Color(0xFFD32F2F), // merah
+                ],
+              ),
+            ),
+          ),
           actions: [
             // Show admin badge if user is admin
             if (permissionManager.isAdmin)
@@ -376,7 +406,10 @@ class _MainLayoutState extends State<MainLayout> {
                   children: [
                     Icon(Icons.shield, size: 14),
                     SizedBox(width: 4),
-                    Text('Admin', style: TextStyle(fontSize: 12)),
+                    Text(
+                      'Admin',
+                      style: TextStyle(fontSize: 12, color: Colors.white),
+                    ),
                   ],
                 ),
               ),
@@ -550,74 +583,101 @@ class _MainLayoutState extends State<MainLayout> {
               },
             ),
           ),
-
-          // Permission info for non-admin
-          if (permissionManager.isLoggedIn && !permissionManager.isAdmin)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Menu terbatas sesuai permission',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Back button hint
+          // ========== FOOTER SECTION (dengan z-index/elevation) ==========
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.shade100),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.exit_to_app, size: 14, color: Colors.red.shade400),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Tekan tombol back lagi untuk keluar',
-                    style: TextStyle(fontSize: 10, color: Colors.red.shade600),
-                  ),
+              color: Colors.white, // Background solid
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2), // Shadow ke atas
                 ),
               ],
             ),
-          ),
-
-          // Footer
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'MAJSF Scanner App',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                // Permission info for non-admin
+                if (permissionManager.isLoggedIn && !permissionManager.isAdmin)
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Menu terbatas sesuai permission',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Back button hint
+                Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade100),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.exit_to_app,
+                        size: 14,
+                        color: Colors.red.shade400,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Tekan tombol back lagi untuk keluar',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.red.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Version 1.2.0',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 10),
+
+                // Footer
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        'MAJSF Scanner App',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Version 1.2.0',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -625,8 +685,9 @@ class _MainLayoutState extends State<MainLayout> {
         ],
       ),
     );
-  }
+  } // <-- TUTUP Container footer
 
+  // ================================================================
   Widget? _buildMenuTrailing(MenuItemConfig item) {
     if (!item.enabled) {
       return const Icon(Icons.lock_outline, size: 16, color: Colors.grey);

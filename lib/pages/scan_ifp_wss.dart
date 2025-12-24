@@ -8,16 +8,20 @@ import '../components/confirm_dialog.dart';
 import '../services/wss_service.dart';
 import '../utils/shared_prefs.dart';
 import '../utils/helpers.dart';
+import '../utils/permission_manager.dart';
+import '../utils/permissions.dart';
 import '../models/wss_model.dart';
 
-class ScanInPage extends StatefulWidget {
-  const ScanInPage({super.key});
+class ScanIfpWssPage extends StatefulWidget {
+  final String nik;
+
+  const ScanIfpWssPage({super.key, required this.nik});
 
   @override
-  State<ScanInPage> createState() => _ScanInPageState();
+  State<ScanIfpWssPage> createState() => _ScanIfpWssPageState();
 }
 
-class _ScanInPageState extends State<ScanInPage> {
+class _ScanIfpWssPageState extends State<ScanIfpWssPage> {
   final _tagController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -38,24 +42,15 @@ class _ScanInPageState extends State<ScanInPage> {
   // Counter untuk force rebuild scanner
   int _scannerRebuildKey = 0;
 
+  /// Check apakah user punya permission untuk input
+  bool get canInput {
+    if (permissionManager.isAdmin) return true;
+    return permissionManager.hasPermission(AppPermissions.inputScanIfpWss);
+  }
+
   @override
   void initState() {
     super.initState();
-    _checkUserLogin();
-  }
-
-  void _checkUserLogin() {
-    final user = SharedPrefs.getUser();
-    if (user == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ErrorDialog.show(
-          context,
-          title: 'Belum Login',
-          message: 'Silakan isi NIK di halaman Profile terlebih dahulu.',
-          onConfirm: () => Navigator.pushReplacementNamed(context, '/profile'),
-        );
-      });
-    }
   }
 
   void _onBarcodeScanned(String barcode) {
@@ -194,6 +189,15 @@ class _ScanInPageState extends State<ScanInPage> {
   }
 
   Future<void> _submitScanIn() async {
+    // Block jika tidak punya permission input
+    if (!canInput) {
+      ErrorDialog.show(
+        context,
+        message: 'Anda tidak memiliki permission untuk melakukan scan in',
+      );
+      return;
+    }
+
     // Block jika sudah pernah di-scan
     if (_isAlreadyScanned) {
       return;
@@ -209,9 +213,8 @@ class _ScanInPageState extends State<ScanInPage> {
       return;
     }
 
-    final user = SharedPrefs.getUser();
-    if (user == null) {
-      ErrorDialog.show(context, message: 'Silakan login terlebih dahulu');
+    if (widget.nik.isEmpty) {
+      ErrorDialog.show(context, message: 'NIK tidak tersedia');
       return;
     }
 
@@ -232,7 +235,7 @@ class _ScanInPageState extends State<ScanInPage> {
     final response = await WssService.scanIn(
       partWss: _tagData!.partNumber,
       qty: _qtyFromTag,
-      nik: user.nik,
+      nik: widget.nik,
       deviceId: SharedPrefs.getDeviceId(),
       idTagOk: _tagData!.idTagOk,
     );
@@ -284,56 +287,120 @@ class _ScanInPageState extends State<ScanInPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan IFP WSS'),
-        centerTitle: true,
-        actions: [
-          if (_tagData != null)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _resetForm,
-              tooltip: 'Reset',
-            ),
+    // Check permission - jika tidak punya view permission, tampilkan no access
+    if (!permissionManager.hasPermission(AppPermissions.viewScanIfpWss) &&
+        !permissionManager.isAdmin) {
+      return _buildNoAccess();
+    }
+
+    return SingleChildScrollView(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // View-only banner jika tidak punya permission input
+          if (!canInput) ...[
+            _buildViewOnlyBanner(),
+            const SizedBox(height: 12),
+          ],
+
+          // Step 1: Scanner / Manual Input
+          if (_tagData == null) ...[
+            _buildInputSection(),
+            const SizedBox(height: 16),
+          ],
+
+          // Step 2: Tag Info
+          if (_tagData != null) ...[
+            _buildTagInfoCard(),
+            const SizedBox(height: 12),
+          ],
+
+          // WARNING: Tag sudah di-scan (inline card, bukan modal)
+          if (_isAlreadyScanned && _previousScanInfo != null) ...[
+            _buildAlreadyScannedCard(),
+            const SizedBox(height: 12),
+          ],
+
+          // Step 3: WSS Info & Submit
+          if (_wssPartData != null && _isWssValid) ...[
+            _buildWssInfoCard(),
+            const SizedBox(height: 12),
+            _buildQtyDisplayCard(),
+            const SizedBox(height: 20),
+            if (canInput) _buildSubmitButton(),
+            if (canInput) const SizedBox(height: 12),
+            _buildResetButton(),
+          ],
         ],
       ),
-      drawer: const AppDrawer(currentRoute: '/scan-in'),
-      body: SingleChildScrollView(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
+    );
+  }
+
+  /// No access widget
+  Widget _buildNoAccess() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Step 1: Scanner / Manual Input
-            if (_tagData == null) ...[
-              _buildInputSection(),
-              const SizedBox(height: 16),
-            ],
-
-            // Step 2: Tag Info
-            if (_tagData != null) ...[
-              _buildTagInfoCard(),
-              const SizedBox(height: 12),
-            ],
-
-            // WARNING: Tag sudah di-scan (inline card, bukan modal)
-            if (_isAlreadyScanned && _previousScanInfo != null) ...[
-              _buildAlreadyScannedCard(),
-              const SizedBox(height: 12),
-            ],
-
-            // Step 3: WSS Info & Submit
-            if (_wssPartData != null && _isWssValid) ...[
-              _buildWssInfoCard(),
-              const SizedBox(height: 12),
-              _buildQtyDisplayCard(),
-              const SizedBox(height: 20),
-              _buildSubmitButton(),
-              const SizedBox(height: 12),
-              _buildResetButton(),
-            ],
+            Icon(Icons.lock_outline, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Akses Ditolak',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Anda tidak memiliki permission untuk mengakses halaman ini.\nHubungi admin untuk mendapatkan akses.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// View only banner
+  Widget _buildViewOnlyBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.visibility, color: Colors.orange.shade700, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mode Lihat Saja',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade800,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  'Anda tidak memiliki permission untuk menyimpan data',
+                  style: TextStyle(color: Colors.orange.shade700, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -806,12 +873,12 @@ class _ScanInPageState extends State<ScanInPage> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 20),
               decoration: BoxDecoration(
-                color: _isAlreadyScanned
+                color: _isAlreadyScanned || !canInput
                     ? Colors.grey.shade200
                     : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: _isAlreadyScanned
+                  color: _isAlreadyScanned || !canInput
                       ? Colors.grey.shade400
                       : Colors.grey.shade300,
                 ),
@@ -823,7 +890,7 @@ class _ScanInPageState extends State<ScanInPage> {
                     style: TextStyle(
                       fontSize: 48,
                       fontWeight: FontWeight.bold,
-                      color: _isAlreadyScanned
+                      color: _isAlreadyScanned || !canInput
                           ? Colors.grey.shade500
                           : Colors.blue.shade700,
                     ),
@@ -845,10 +912,12 @@ class _ScanInPageState extends State<ScanInPage> {
                   child: Text(
                     _isAlreadyScanned
                         ? 'Tag sudah di-scan, tidak dapat disimpan ulang'
-                        : 'Qty diambil dari data Tag OK',
+                        : !canInput
+                        ? 'Anda tidak memiliki permission untuk menyimpan'
+                        : 'Pastikan Qty Aktual sesuai',
                     style: TextStyle(
                       fontSize: 11,
-                      color: _isAlreadyScanned
+                      color: _isAlreadyScanned || !canInput
                           ? Colors.orange.shade700
                           : Colors.grey.shade600,
                       fontStyle: FontStyle.italic,
@@ -864,8 +933,8 @@ class _ScanInPageState extends State<ScanInPage> {
   }
 
   Widget _buildSubmitButton() {
-    // Disabled jika sudah di-scan atau sedang loading
-    final isDisabled = _isAlreadyScanned || _isLoading;
+    // Disabled jika sudah di-scan, tidak punya permission, atau sedang loading
+    final isDisabled = _isAlreadyScanned || !canInput || _isLoading;
 
     return SizedBox(
       height: 52,

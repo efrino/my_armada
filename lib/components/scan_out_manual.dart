@@ -27,12 +27,12 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
   bool isLoadingParts = false;
   Map<String, dynamic>? stockInfo;
   List<Map<String, dynamic>> partList = [];
-  String? selectedPartNumber;
+  Map<String, dynamic>? selectedPart; // DIUBAH: Simpan seluruh part data
 
   /// Check if user has input permission for the current area
   bool get hasInputPermission {
     if (permissionManager.isAdmin) return true;
-    
+
     switch (widget.area) {
       case 'IFPD':
         return permissionManager.hasPermission(AppPermissions.inputScanOutIfpd);
@@ -48,21 +48,23 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
   @override
   void initState() {
     super.initState();
-    
+
     // Double check permission on init
     if (!hasInputPermission) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Anda tidak memiliki akses input di area ${widget.area}'),
+            content: Text(
+              'Anda tidak memiliki akses input di area ${widget.area}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
       });
       return;
     }
-    
+
     _loadPartList();
   }
 
@@ -96,11 +98,12 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
     }
   }
 
-  void _onPartSelected(String? partNumber) {
-    if (partNumber == null) return;
+  void _onPartSelected(Map<String, dynamic> part) {
+    final partNumber = part['part_number']?.toString();
+    if (partNumber == null || partNumber.isEmpty) return;
 
     setState(() {
-      selectedPartNumber = partNumber;
+      selectedPart = part; // DIUBAH: Simpan seluruh part data
       stockInfo = null;
     });
 
@@ -146,7 +149,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
       return;
     }
 
-    final partNumber = selectedPartNumber;
+    final partNumber = selectedPart?['part_number']?.toString();
     final qtyText = _qtyController.text.trim();
 
     if (partNumber == null || partNumber.isEmpty) {
@@ -180,7 +183,10 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
       // Reload stock info after successful scan out
       Map<String, dynamic>? updatedStockInfo;
       if (result['success'] == true && partNumber.isNotEmpty) {
-        updatedStockInfo = await ScanOutService.getStockInfo(partNumber, widget.area);
+        updatedStockInfo = await ScanOutService.getStockInfo(
+          partNumber,
+          widget.area,
+        );
       }
 
       setState(() {
@@ -218,7 +224,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
   }
 
   Widget _buildStockInfoCard() {
-    if (selectedPartNumber == null) {
+    if (selectedPart == null) {
       return const SizedBox.shrink();
     }
 
@@ -263,10 +269,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
             Expanded(
               child: Text(
                 'Stok tidak ditemukan atau sudah habis',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.red.shade700,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700),
               ),
             ),
           ],
@@ -277,7 +280,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
     final data = stockInfo!['data'];
     final totalBalance = data['total_balance'] ?? 0;
     final stocks = data['stocks'] as List? ?? [];
-    
+
     // Filter only available stocks (balance > 0)
     final availableStocks = stocks.where((s) {
       final balance = int.tryParse(s['balance']?.toString() ?? '0') ?? 0;
@@ -309,7 +312,10 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.shade600,
                   borderRadius: BorderRadius.circular(12),
@@ -325,7 +331,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
               ),
             ],
           ),
-          
+
           // Available stock details
           if (availableStocks.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -344,7 +350,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
               final tagId = stock['id_tag_ok'] ?? '-';
               final balance = stock['balance'] ?? '0';
               final status = stock['stock_status'] ?? '-';
-              
+
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
                 child: Row(
@@ -366,10 +372,13 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: status == 'TERSEDIA' 
-                            ? Colors.green.shade100 
+                        color: status == 'TERSEDIA'
+                            ? Colors.green.shade100
                             : Colors.orange.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -378,8 +387,8 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: status == 'TERSEDIA' 
-                              ? Colors.green.shade800 
+                          color: status == 'TERSEDIA'
+                              ? Colors.green.shade800
                               : Colors.orange.shade800,
                         ),
                       ),
@@ -422,7 +431,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
       builder: (context) => _PartPickerDialog(
         partList: partList,
         onSelected: (part) {
-          _onPartSelected(part['part_number']);
+          _onPartSelected(part);
           Navigator.pop(context);
         },
       ),
@@ -589,7 +598,7 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
                         ],
                       ),
                     )
-                  // Dropdown Button
+                  // Dropdown Button - DIUBAH: Tampilkan lebih lengkap
                   else
                     InkWell(
                       onTap: partList.isEmpty ? null : _showPartPickerDialog,
@@ -603,19 +612,68 @@ class _ScanOutManualModalState extends State<ScanOutManualModal> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
-                              child: Text(
-                                selectedPartNumber ?? 'Pilih Part Number',
-                                style: TextStyle(
-                                  color: selectedPartNumber != null
-                                      ? Colors.black
-                                      : Colors.grey.shade600,
-                                  fontSize: 14,
+                              child: selectedPart == null
+                                  ? Text(
+                                      'Pilih Part Number',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 14,
+                                      ),
+                                    )
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          selectedPart!['part_number']
+                                                  ?.toString() ??
+                                              '-',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        if (selectedPart!['job_number'] !=
+                                                null &&
+                                            selectedPart!['job_number']
+                                                .toString()
+                                                .isNotEmpty)
+                                          Text(
+                                            'Job: ${selectedPart!['job_number']}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                            ),
+                            // Tampilkan qty_kbn jika ada
+                            if (selectedPart != null &&
+                                selectedPart!['qty_kbn'] != null) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Qty: ${selectedPart!['qty_kbn']}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange.shade900,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
+                            const SizedBox(width: 8),
                             Icon(
                               Icons.arrow_drop_down,
                               color: Colors.grey.shade600,
@@ -787,7 +845,8 @@ class _PartPickerDialogState extends State<_PartPickerDialog> {
       if (index == -1) {
         return false;
       }
-      remaining = remaining.substring(0, index) + remaining.substring(index + 1);
+      remaining =
+          remaining.substring(0, index) + remaining.substring(index + 1);
     }
 
     return true;
@@ -888,27 +947,21 @@ class _PartPickerDialogState extends State<_PartPickerDialog> {
 
             // Result count
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _searchController.text.isEmpty
                       ? '${_filteredPartList.length} items tersedia'
                       : 'Ditemukan ${_filteredPartList.length} hasil',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ),
             ),
 
             const Divider(height: 1),
 
-            // List
+            // List - DIUBAH: Tampilan sama seperti ScanIn
             Flexible(
               child: _filteredPartList.isEmpty
                   ? Padding(
@@ -935,37 +988,108 @@ class _PartPickerDialogState extends State<_PartPickerDialog> {
                         ],
                       ),
                     )
-                  : ListView.builder(
+                  : ListView.separated(
                       shrinkWrap: true,
+                      padding: const EdgeInsets.only(top: 8),
                       itemCount: _filteredPartList.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final part = _filteredPartList[index];
-                        final partNumber = part['part_number'] ?? '-';
-                        final jobNumber = part['job_number'] ?? '';
+                        final partNumber =
+                            part['part_number']?.toString() ?? '-';
+                        final jobNumber = part['job_number']?.toString() ?? '';
 
-                        return ListTile(
-                          dense: true,
-                          title: Text(
-                            partNumber,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                        return InkWell(
+                          onTap: () => widget.onSelected(part),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                // Icon
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.qr_code_2,
+                                    size: 24,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+
+                                // Content
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        partNumber,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      if (jobNumber.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Job: $jobNumber',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+
+                                // Qty Badge - DITAMBAHKAN
+                                if (part['qty_kbn'] != null) ...[
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          'Qty',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.orange.shade900,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          part['qty_kbn'].toString(),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.orange.shade900,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          subtitle: jobNumber.isNotEmpty
-                              ? Text(
-                                  'Job: $jobNumber',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                )
-                              : null,
-                          trailing: const Icon(
-                            Icons.chevron_right,
-                            color: Colors.grey,
-                          ),
-                          onTap: () => widget.onSelected(part),
                         );
                       },
                     ),

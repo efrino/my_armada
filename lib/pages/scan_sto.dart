@@ -4,6 +4,8 @@ import '../services/scan_sto.dart';
 import '../components/scan_sto_detail.dart';
 import '../components/scan_sto_manual.dart';
 import '../components/response_modal.dart';
+import '../utils/permission_manager.dart';
+import '../utils/permissions.dart';
 
 class ScanStoPage extends StatefulWidget {
   final String nik;
@@ -15,7 +17,7 @@ class ScanStoPage extends StatefulWidget {
 }
 
 class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
-  String? selectedArea;
+  String? selectedGroup;
   Map<String, dynamic>? lastScannedTag;
   MobileScannerController? cameraController;
   bool isProcessing = false;
@@ -24,18 +26,23 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
   DateTime? lastScanTime;
   bool isCameraInitialized = false;
 
-  final List<Map<String, String>> areaOptions = [
-    {'value': '', 'label': '--- Pilih Area ---'},
-    {'value': 'IFRM', 'label': 'IFRM (Belum tersedia)'},
-    {'value': 'IFPP', 'label': 'IFPP'},
-    {'value': 'IFPD', 'label': 'IFPD'},
+  final List<Map<String, dynamic>> groupOptions = [
+    {'value': '', 'label': '--- Pilih Group ---', 'color': Colors.grey},
+    {'value': 'A', 'label': 'Group A', 'color': Colors.blue},
+    {'value': 'B', 'label': 'Group B', 'color': Colors.orange},
   ];
+
+  /// Check apakah user punya permission untuk input
+  bool get canInput {
+    if (permissionManager.isAdmin) return true;
+    return permissionManager.hasPermission(AppPermissions.inputScanSto);
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    selectedArea = ''; // Default to no selection
+    selectedGroup = '';
   }
 
   @override
@@ -80,7 +87,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
   }
 
   Future<void> _initializeCamera() async {
-    if (cameraController != null) return; // Already initialized
+    if (cameraController != null) return;
 
     try {
       cameraController = MobileScannerController(
@@ -117,34 +124,31 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     }
   }
 
-  void _onAreaChanged(String? value) {
+  void _onGroupChanged(String? value) {
     if (value == null) return;
 
-    // Prevent selecting disabled area
-    if (value == 'IFRM') {
-      _showError('Area IFRM belum tersedia');
-      return;
-    }
-
-    // Only update selectedArea, don't touch camera
     setState(() {
-      selectedArea = value;
+      selectedGroup = value;
       lastScannedTag = null;
       lastScannedCode = null;
       lastScanTime = null;
     });
 
-    // Initialize camera only if not already initialized and area is valid
+    // Initialize camera if group is valid
     if (value.isNotEmpty && !isCameraInitialized) {
       _initializeCamera();
     }
   }
 
-  Future<void> _handleBarcodeScan(BarcodeCapture capture) async {
-    // Prevent scan if conditions not met
-    if (isModalOpen || isProcessing || !isCameraInitialized) return;
+  Color _getGroupColor() {
+    if (selectedGroup == 'A') return Colors.blue;
+    if (selectedGroup == 'B') return Colors.orange;
+    return Colors.grey;
+  }
 
-    if (selectedArea == null || selectedArea!.isEmpty) return;
+  Future<void> _handleBarcodeScan(BarcodeCapture capture) async {
+    if (isModalOpen || isProcessing || !isCameraInitialized) return;
+    if (selectedGroup == null || selectedGroup!.isEmpty) return;
 
     if (widget.nik.isEmpty) {
       _showError('Anda belum login. Silakan login terlebih dahulu.');
@@ -168,6 +172,10 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     lastScannedCode = code;
     lastScanTime = now;
 
+    await _processBarcode(code);
+  }
+
+  Future<void> _processBarcode(String code) async {
     if (!mounted) return;
 
     setState(() {
@@ -175,7 +183,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     });
 
     try {
-      final tagData = await ScanStoService.getTagData(code, selectedArea!);
+      final tagData = await ScanStoService.getTagData(code);
 
       if (!mounted) return;
 
@@ -188,9 +196,9 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
           lastScannedTag = tagData;
         });
 
-        await _showDetailTagModal(tagData);
+        await _showDetailModal(tagData);
       } else {
-        _showError('Tag tidak ditemukan');
+        _showError('Tag "$code" tidak ditemukan');
       }
     } catch (e) {
       if (!mounted) return;
@@ -202,7 +210,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showDetailTagModal(Map<String, dynamic> tagData) async {
+  Future<void> _showDetailModal(Map<String, dynamic> tagData) async {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).clearSnackBars();
@@ -214,11 +222,12 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     await showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => DetailTagModal(
+      builder: (context) => StoDetailModal(
         tagData: tagData,
-        area: selectedArea!,
+        group: selectedGroup!,
         nik: widget.nik,
-        onUpload: (result) async {
+        canInput: canInput,
+        onSubmit: (result) async {
           await ResponseModal.show(
             context,
             success: result['success'] as bool,
@@ -241,17 +250,13 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshLastTagData() async {
-    if (lastScannedTag == null ||
-        selectedArea == null ||
-        selectedArea!.isEmpty) {
-      return;
-    }
+    if (lastScannedTag == null) return;
 
     try {
-      final updatedTag = await ScanStoService.getTagData(
-        lastScannedTag!['id_tag_ok'] ?? lastScannedTag!['labelbox_id'],
-        selectedArea!,
-      );
+      final tagId = lastScannedTag!['id_tag'] ?? '';
+      if (tagId.isEmpty) return;
+
+      final updatedTag = await ScanStoService.getTagData(tagId);
 
       if (!mounted) return;
 
@@ -266,21 +271,20 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshLastTag() async {
-    if (lastScannedTag == null ||
-        selectedArea == null ||
-        selectedArea!.isEmpty) {
-      return;
-    }
+    if (lastScannedTag == null) return;
 
     setState(() {
       isProcessing = true;
     });
 
     try {
-      final updatedTag = await ScanStoService.getTagData(
-        lastScannedTag!['id_tag_ok'] ?? lastScannedTag!['labelbox_id'],
-        selectedArea!,
-      );
+      final tagId = lastScannedTag!['id_tag'] ?? '';
+      if (tagId.isEmpty) {
+        setState(() => isProcessing = false);
+        return;
+      }
+
+      final updatedTag = await ScanStoService.getTagData(tagId);
 
       if (!mounted) return;
 
@@ -292,7 +296,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
         setState(() {
           lastScannedTag = updatedTag;
         });
-        await _showDetailTagModal(updatedTag);
+        await _showDetailModal(updatedTag);
       } else {
         _showError('Tag tidak ditemukan');
       }
@@ -325,9 +329,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(context),
             child: const Text('Batal'),
           ),
           ElevatedButton(
@@ -369,8 +371,8 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
       return;
     }
 
-    if (selectedArea == null || selectedArea!.isEmpty) {
-      _showError('Silakan pilih area terlebih dahulu');
+    if (selectedGroup == null || selectedGroup!.isEmpty) {
+      _showError('Silakan pilih group terlebih dahulu');
       return;
     }
 
@@ -380,15 +382,18 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
 
     showDialog(
       context: context,
-      builder: (context) => ScanStoManualModal(
-        area: selectedArea!,
+      builder: (context) => StoManualInputModal(
+        group: selectedGroup!,
         nik: widget.nik,
-        onSubmit: (result) async {
-          await ResponseModal.show(
-            context,
-            success: result['success'] as bool,
-            message: result['message'] as String,
-          );
+        canInput: canInput,
+        onTagFound: (tagData) async {
+          setState(() {
+            lastScannedTag = tagData;
+          });
+          // Close manual modal first
+          Navigator.pop(context);
+          // Then show detail modal
+          await _showDetailModal(tagData);
         },
       ),
     ).then((_) {
@@ -408,7 +413,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
         content: Text(message),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -422,12 +427,15 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasValidArea =
-        selectedArea != null &&
-        selectedArea!.isNotEmpty &&
-        selectedArea != 'IFRM';
+    // Check permission
+    if (!permissionManager.hasPermission(AppPermissions.viewScanSto) &&
+        !permissionManager.isAdmin) {
+      return _buildNoAccess();
+    }
 
-    final bool showCamera = hasValidArea && isCameraInitialized;
+    final bool hasValidGroup =
+        selectedGroup != null && selectedGroup!.isNotEmpty;
+    final bool showCamera = hasValidGroup && isCameraInitialized;
 
     return Scaffold(
       body: Stack(
@@ -444,8 +452,22 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
           // Semi-transparent overlay when modal is open
           if (isModalOpen) Container(color: Colors.black54),
 
-          // Top area selector
-          Positioned(top: 16, left: 16, right: 16, child: _buildAreaSelector()),
+          // Top group selector
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 16,
+            child: _buildGroupSelector(),
+          ),
+
+          // View-only banner
+          if (hasValidGroup && !canInput)
+            Positioned(
+              top: 100,
+              left: 16,
+              right: 16,
+              child: _buildViewOnlyBanner(),
+            ),
 
           // Scanning indicator
           if (isProcessing && !isModalOpen)
@@ -467,7 +489,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
             ),
 
           // Camera initializing indicator
-          if (hasValidArea && !isCameraInitialized && !isModalOpen)
+          if (hasValidGroup && !isCameraInitialized && !isModalOpen)
             Container(
               color: Colors.black87,
               child: const Center(
@@ -485,12 +507,12 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
               ),
             ),
 
-          // Floating action buttons (only show when camera is ready)
+          // Floating action buttons
           if (showCamera)
             Positioned(right: 16, bottom: 100, child: _buildActionButtons()),
 
-          // Manual input button at bottom center
-          if (hasValidArea)
+          // Manual input button
+          if (hasValidGroup)
             Positioned(
               left: 0,
               right: 0,
@@ -502,7 +524,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
                   label: const Text('Input Manual'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: Colors.blue,
+                    foregroundColor: _getGroupColor(),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 12,
@@ -520,6 +542,62 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildNoAccess() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_outline, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Akses Ditolak',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Anda tidak memiliki permission untuk mengakses halaman ini.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewOnlyBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.visibility, color: Colors.orange.shade700, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Mode Lihat Saja - Tidak dapat input data',
+              style: TextStyle(
+                color: Colors.orange.shade800,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCameraPlaceholder() {
     return Container(
       color: Colors.grey.shade900,
@@ -532,17 +610,10 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                selectedArea == null || selectedArea!.isEmpty
-                    ? 'Silakan pilih area untuk memulai scanning'
-                    : selectedArea == 'IFRM'
-                    ? 'Area IFRM belum tersedia'
+                selectedGroup == null || selectedGroup!.isEmpty
+                    ? 'Silakan pilih Group untuk memulai scanning'
                     : 'Kamera tidak aktif',
-                style: TextStyle(
-                  color: selectedArea == 'IFRM'
-                      ? Colors.red.shade300
-                      : Colors.grey.shade400,
-                  fontSize: 16,
-                ),
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -552,19 +623,21 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildAreaSelector() {
+  Widget _buildGroupSelector() {
+    final groupColor = _getGroupColor();
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue.shade400, Colors.blue.shade600],
+          colors: [groupColor.withOpacity(0.8), groupColor],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withValues(alpha: 0.5),
+            color: groupColor.withOpacity(0.5),
             blurRadius: 12,
             spreadRadius: 2,
           ),
@@ -581,14 +654,10 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: groupColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                Icons.location_on,
-                color: Colors.blue.shade700,
-                size: 24,
-              ),
+              child: Icon(Icons.group_work, color: groupColor, size: 24),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -596,45 +665,60 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Area Scan',
+                    'Pilih Group STO',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
-                      value: selectedArea,
+                      value: selectedGroup,
                       isExpanded: true,
                       isDense: true,
-                      icon: Icon(
-                        Icons.arrow_drop_down,
-                        color: Colors.blue.shade700,
-                      ),
+                      icon: Icon(Icons.arrow_drop_down, color: groupColor),
                       style: TextStyle(
-                        color: Colors.blue.shade700,
+                        color: groupColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
-                      items: areaOptions.map((area) {
-                        final bool isDisabled = area['value'] == 'IFRM';
+                      items: groupOptions.map((group) {
+                        final color = group['color'] as Color;
                         return DropdownMenuItem<String>(
-                          value: area['value'],
-                          enabled: !isDisabled,
+                          value: group['value'] as String,
                           child: Text(
-                            area['label']!,
+                            group['label'] as String,
                             style: TextStyle(
-                              color: isDisabled
-                                  ? Colors.grey.shade400
-                                  : Colors.blue.shade700,
+                              color: color,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         );
                       }).toList(),
-                      onChanged: _onAreaChanged,
+                      onChanged: _onGroupChanged,
                     ),
                   ),
                 ],
               ),
             ),
+            // Group indicator badge
+            if (selectedGroup != null && selectedGroup!.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: groupColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  selectedGroup!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -650,7 +734,7 @@ class _ScanStoPageState extends State<ScanStoPage> with WidgetsBindingObserver {
               ? _refreshLastTag
               : null,
           backgroundColor: lastScannedTag != null
-              ? Colors.blue
+              ? _getGroupColor()
               : Colors.grey.shade600,
           child: const Icon(Icons.info_outline),
         ),

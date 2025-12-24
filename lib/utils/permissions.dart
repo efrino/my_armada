@@ -28,6 +28,7 @@ class AppPermissions {
   // ============ SCAN IFP WSS PERMISSIONS ============
   // View permissions
   static const String viewScanIfpWss = 'view.scanIfpWss';
+  static const String viewHistoryIfpWss = 'view.historyIfpWss';
 
   // Input permissions
   static const String inputScanIfpWss = 'input.scanIfpWss';
@@ -35,15 +36,9 @@ class AppPermissions {
   // ============ SCAN STO PERMISSIONS ============
   // View permissions
   static const String viewScanSto = 'view.scanSto';
-  static const String viewScanStoIfpd = 'view.scanStoIfpd';
-  static const String viewScanStoIfpp = 'view.scanStoIfpp';
-  static const String viewScanStoIfrm = 'view.scanStoIfrm';
 
   // Input permissions
   static const String inputScanSto = 'input.scanSto';
-  static const String inputScanStoIfpd = 'input.scanStoIfpd';
-  static const String inputScanStoIfpp = 'input.scanStoIfpp';
-  static const String inputScanStoIfrm = 'input.scanStoIfrm';
 
   // ============ HISTORY PERMISSIONS ============
   static const String viewHistoryScan = 'view.historyScan';
@@ -51,7 +46,7 @@ class AppPermissions {
   static const String exportHistoryScan = 'export.historyScan';
   static const String exportHistorySto = 'export.historySto';
 
-  // ============ ADMIN PERMISSIONS ============
+  // // ============ ADMIN PERMISSIONS ============
   static const String manageUsers = 'admin.manageUsers';
   static const String managePermissions = 'admin.managePermissions';
 
@@ -159,48 +154,18 @@ class AppPermissions {
         description: 'Bisa kirim data Scan IFP WSS',
       ),
 
-      // Scan STO
+      // Scan STO (update)
       PermissionItem(
         key: viewScanSto,
-        label: 'Lihat Menu Scan STO',
+        label: 'Lihat Scan STO',
         category: 'Scan STO',
-        description: 'Akses ke menu Scan STO',
+        description: 'Akses menu Scan STO',
       ),
       PermissionItem(
-        key: viewScanStoIfpd,
-        label: 'Lihat Scan STO IFPD',
+        key: inputScanSto,
+        label: 'Input Scan STO',
         category: 'Scan STO',
-        description: 'Akses scan STO area IFPD',
-      ),
-      PermissionItem(
-        key: viewScanStoIfpp,
-        label: 'Lihat Scan STO IFPP',
-        category: 'Scan STO',
-        description: 'Akses scan STO area IFPP',
-      ),
-      PermissionItem(
-        key: viewScanStoIfrm,
-        label: 'Lihat Scan STO IFRM',
-        category: 'Scan STO',
-        description: 'Akses scan STO area IFRM',
-      ),
-      PermissionItem(
-        key: inputScanStoIfpd,
-        label: 'Input Scan STO IFPD',
-        category: 'Scan STO',
-        description: 'Bisa melakukan scan STO di area IFPD',
-      ),
-      PermissionItem(
-        key: inputScanStoIfpp,
-        label: 'Input Scan STO IFPP',
-        category: 'Scan STO',
-        description: 'Bisa melakukan scan STO di area IFPP',
-      ),
-      PermissionItem(
-        key: inputScanStoIfrm,
-        label: 'Input Scan STO IFRM',
-        category: 'Scan STO',
-        description: 'Bisa melakukan scan STO di area IFRM',
+        description: 'Dapat input qty pada Scan STO',
       ),
 
       // History
@@ -228,19 +193,12 @@ class AppPermissions {
         category: 'History',
         description: 'Bisa export data history STO',
       ),
-
-      // Admin
+      // History IFP WSS (TAMBAHAN BARU)
       PermissionItem(
-        key: manageUsers,
-        label: 'Kelola Users',
-        category: 'Admin',
-        description: 'Bisa menambah/menghapus user',
-      ),
-      PermissionItem(
-        key: managePermissions,
-        label: 'Kelola Permissions',
-        category: 'Admin',
-        description: 'Bisa mengubah permission user',
+        key: viewHistoryIfpWss,
+        label: 'Lihat History IFP WSS',
+        category: 'History IFP WSS',
+        description: 'Akses ke menu History IFP WSS',
       ),
     ];
   }

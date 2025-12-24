@@ -25,7 +25,7 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
   Map<String, dynamic>? selectedPart;
   bool isLoading = false;
   bool isSubmitting = false;
-  
+
   // Stock info state
   bool isLoadingStock = false;
   Map<String, dynamic>? stockInfo;
@@ -111,10 +111,12 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
   /// Load stock info for selected part number
   Future<void> _loadStockInfo() async {
     if (selectedPart == null) return;
-    
-    final partNumber = selectedPart!['part_number']?.toString() ?? 
-                       selectedPart!['job_number']?.toString() ?? '';
-    
+
+    final partNumber =
+        selectedPart!['part_number']?.toString() ??
+        selectedPart!['job_number']?.toString() ??
+        '';
+
     if (partNumber.isEmpty) return;
 
     setState(() {
@@ -123,7 +125,7 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
 
     try {
       final result = await ScanInService.getStockInfo(partNumber, widget.area);
-      
+
       if (mounted) {
         setState(() {
           stockInfo = result;
@@ -178,15 +180,16 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
         ),
         child: Row(
           children: [
-            Icon(Icons.inventory_2_outlined, color: Colors.grey.shade500, size: 20),
+            Icon(
+              Icons.inventory_2_outlined,
+              color: Colors.grey.shade500,
+              size: 20,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Info stok tidak tersedia',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ),
           ],
@@ -197,7 +200,7 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
     final data = stockInfo!['data'];
     final totalBalance = data['total_balance'] ?? 0;
     final stocks = data['stocks'] as List? ?? [];
-    
+
     // Filter only available stocks (balance > 0)
     final availableStocks = stocks.where((s) {
       final balance = int.tryParse(s['balance']?.toString() ?? '0') ?? 0;
@@ -229,7 +232,10 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.shade600,
                   borderRadius: BorderRadius.circular(12),
@@ -245,7 +251,7 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
               ),
             ],
           ),
-          
+
           // Available stock details
           if (availableStocks.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -264,7 +270,7 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
               final tagId = stock['id_tag_ok'] ?? '-';
               final balance = stock['balance'] ?? '0';
               final status = stock['stock_status'] ?? '-';
-              
+
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
                 child: Row(
@@ -286,10 +292,13 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: status == 'TERSEDIA' 
-                            ? Colors.green.shade100 
+                        color: status == 'TERSEDIA'
+                            ? Colors.green.shade100
                             : Colors.orange.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -298,8 +307,8 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: status == 'TERSEDIA' 
-                              ? Colors.green.shade800 
+                          color: status == 'TERSEDIA'
+                              ? Colors.green.shade800
                               : Colors.orange.shade800,
                         ),
                       ),
@@ -569,17 +578,19 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
                                     Text(
                                       selectedPart!['part_number']
                                               ?.toString() ??
-                                          selectedPart!['job_number']
-                                              ?.toString() ??
                                           '-',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
                                       ),
                                     ),
-                                    if (selectedPart!['part_name'] != null)
+                                    // DIUBAH: Tampilkan job_number bukan part_name
+                                    if (selectedPart!['job_number'] != null &&
+                                        selectedPart!['job_number']
+                                            .toString()
+                                            .isNotEmpty)
                                       Text(
-                                        selectedPart!['part_name'].toString(),
+                                        'Job: ${selectedPart!['job_number']}',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600,
@@ -588,6 +599,30 @@ class _ScanInManualModalState extends State<ScanInManualModal> {
                                   ],
                                 ),
                         ),
+                        // Tampilkan qty_kbn jika ada
+                        if (selectedPart != null &&
+                            selectedPart!['qty_kbn'] != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Qty: ${selectedPart!['qty_kbn']}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: 8),
                         Icon(
                           Icons.arrow_forward_ios,
                           size: 16,
@@ -720,7 +755,8 @@ class _PartSelectionModalState extends State<_PartSelectionModal> {
         return false; // Karakter tidak ditemukan
       }
       // Hapus karakter yang sudah match agar tidak di-match lagi
-      remaining = remaining.substring(0, index) + remaining.substring(index + 1);
+      remaining =
+          remaining.substring(0, index) + remaining.substring(index + 1);
     }
 
     return true;
@@ -735,11 +771,9 @@ class _PartSelectionModalState extends State<_PartSelectionModal> {
         filteredPartList = widget.partList.where((part) {
           final partNumber = (part['part_number'] ?? '').toString();
           final jobNumber = (part['job_number'] ?? '').toString();
-          final partName = (part['part_name'] ?? '').toString();
 
           return _flexibleMatch(partNumber, query) ||
-              _flexibleMatch(jobNumber, query) ||
-              _flexibleMatch(partName, query);
+              _flexibleMatch(jobNumber, query);
         }).toList();
       }
     });
@@ -890,25 +924,27 @@ class _PartSelectionModalState extends State<_PartSelectionModal> {
                                 ),
                                 const SizedBox(width: 12),
 
-                                // Content
+                                // Content - DIUBAH: Tampilkan part_number dan job_number
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        part['part_number']?.toString() ??
-                                            part['job_number']?.toString() ??
-                                            '-',
+                                        part['part_number']?.toString() ?? '-',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,
                                         ),
                                       ),
-                                      if (part['part_name'] != null) ...[
+                                      // DIUBAH: Tampilkan job_number bukan part_name
+                                      if (part['job_number'] != null &&
+                                          part['job_number']
+                                              .toString()
+                                              .isNotEmpty) ...[
                                         const SizedBox(height: 4),
                                         Text(
-                                          part['part_name'].toString(),
+                                          'Job: ${part['job_number']}',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey.shade600,
